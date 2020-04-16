@@ -78,21 +78,28 @@ for(pcl::PointCloud<pcl::PointXYZ>::Ptr cluster : cloudClusters)
 }
 
 //void cityBlock(pcl::visualization::PCLVisualizer::Ptr& viewer)
+
+/*
+Processes input point cloud from the pcd  and render it 
+*/
 void cityBlock(pcl::visualization::PCLVisualizer::Ptr& viewer, ProcessPointClouds<pcl::PointXYZI>* pointProcessorI, const pcl::PointCloud<pcl::PointXYZI>::Ptr& inputCloud)
 {
 
+  // Filtering the poin cloud. Removes unwanted object like points on the roof
   pcl::PointCloud<pcl::PointXYZI>::Ptr FilteredCloud =  pointProcessorI->FilterCloud(inputCloud, 0.3,
   Eigen::Vector4f(-20,-6,-3,-1), Eigen::Vector4f(30,7,2,1) );
   //renderPointCloud(viewer,FilteredCloud,"FilteredCloud");
   
+  // find the points that best fits a plane through cross product
   std::pair<pcl::PointCloud<pcl::PointXYZI>::Ptr, pcl::PointCloud<pcl::PointXYZI>::Ptr> segmentedCloud = pointProcessorI->Ransac3D(FilteredCloud, 100, 0.2);
   //renderPointCloud(viewer,segmentCloud.first,"segmentCloud");
   KdTree* tree = new KdTree;
   
+  // Clustering of points in cloud through Eucliden distance metrics
   for (int i=0; i<segmentedCloud.first->points.size(); i++) 
     tree->insert(segmentedCloud.first->points[i],i);
   std::vector<pcl::PointCloud<pcl::PointXYZI>::Ptr> cloudClusters = 
-    pointProcessorI->euclideanCluster(segmentedCloud.first, tree, 0.5, 30, 250);
+    pointProcessorI->euclideanCluster(segmentedCloud.first, tree, 0.5, 10, 250);
   
   
   //renderPointCloud(viewer,segmentedCloud.first, "obstacle", Color(0,1,1));
@@ -105,6 +112,7 @@ void cityBlock(pcl::visualization::PCLVisualizer::Ptr& viewer, ProcessPointCloud
   {
     renderPointCloud(viewer,cluster,"obstacle"+std::to_string(clusterId),colors[clusterId % 3]);
     
+    // Draw the bounding box around the detected obstacle
     Box box = pointProcessorI->BoundingBox(cluster);
     renderBox(viewer,box,clusterId,colors[clusterId % 3]);
     ++clusterId;
@@ -151,14 +159,15 @@ int main (int argc, char** argv)
 
     while (!viewer->wasStopped ())
     {
-        // Clear viewer
+      // Remove last displayed point clouds and  bounding boxes
       viewer->removeAllPointClouds();
       viewer->removeAllShapes();
 
-      // Load pcd and run obstacle detection process
+      // Fetch individual frame from a pcd stream
       inputCloudI = pointProcessorI->loadPcd((*streamIterator).string());
       cityBlock(viewer, pointProcessorI, inputCloudI);
 
+      // Loop back at the end of the stream
       streamIterator++;
       if(streamIterator == stream.end())
           streamIterator = stream.begin();

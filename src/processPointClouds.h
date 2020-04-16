@@ -19,18 +19,22 @@
 #include <chrono>
 #include "render/box.h"
 
+
+// Structure for each node in KD tree 
 struct Node
 {
 	pcl::PointXYZI point;
 	int id;
-	Node* left;
-	Node* right;
+	Node* left; // left node
+	Node* right; //right node
 
 	Node(pcl::PointXYZI arr, int setId)
 	:	point(arr), id(setId), left(NULL), right(NULL)
 	{}
 };
 
+
+// Structure for KD tree variables and its member functions
 struct KdTree
 {
 	Node* root;
@@ -39,15 +43,17 @@ struct KdTree
 	: root(NULL)
 	{}
   	
+  	// helper Recursive function to insert node into the KD tree
 	void insertHelper(Node** node,uint depth,pcl::PointXYZI point, int id)
     {
+      // If found a empty node, add the node 
       if(*node == NULL)
         *node = new Node(point,id);
       else
       {
         uint cd = depth % 2;
         
-        if(cd == 0)
+        if(cd == 0) 
         {
             if(point.x < (*node)->point.x) 
             	insertHelper(&(*node)->left, depth + 1, point, id);
@@ -56,7 +62,7 @@ struct KdTree
         }
         else
         {
-            if(point.y < (*node)->point.y) 
+            if(point.y < (*node)->point.y)  
               insertHelper(&(*node)->left, depth + 1, point, id);
             else 
               insertHelper(&(*node)->right, depth + 1, point, id);
@@ -64,12 +70,14 @@ struct KdTree
       }
       
     }
-  
+  	
+  	// Insert node into the KD tree
 	void insert(pcl::PointXYZI point, int id)
 	{		
       insertHelper(&root,0,point,id);
 	}
 
+  	// Helper recursive function to search for a target node in the KD tree
     void searchHelper(pcl::PointXYZI target, Node* node, int depth, float distanceTol, std::vector<int>& ids)
     {
         if(node != NULL)
@@ -96,7 +104,7 @@ struct KdTree
         }
     }
 	  
-	// return a list of point ids in the tree that are within distance of target
+	// Search a target node in the KD tree
 	std::vector<int> search(pcl::PointXYZI target, float distanceTol)
 	{
 		std::vector<int> ids;

@@ -19,7 +19,10 @@ void ProcessPointClouds<PointT>::numPoints(typename pcl::PointCloud<PointT>::Ptr
     std::cout << cloud->points.size() << std::endl;
 }
 
-
+/*
+Filter the point cloud 
+implement voxelgrid point extraction, Region of interest and remove points on the roof
+*/
 template<typename PointT>
 typename pcl::PointCloud<PointT>::Ptr ProcessPointClouds<PointT>::FilterCloud(typename pcl::PointCloud<PointT>::Ptr cloud, float filterRes, Eigen::Vector4f minPoint, Eigen::Vector4f maxPoint)
 {
@@ -27,7 +30,7 @@ typename pcl::PointCloud<PointT>::Ptr ProcessPointClouds<PointT>::FilterCloud(ty
     // Time segmentation process
     auto startTime = std::chrono::steady_clock::now();
 
-    // TODO:: Fill in the function to do voxel grid point reduction and region based filtering
+    // TODO:: Fill in the function to do voxel grid point reduction
   	typename pcl::VoxelGrid<PointT> vg;
   	typename pcl::PointCloud<PointT>::Ptr cloudFiltered(new pcl::PointCloud<PointT> ());
 	
@@ -37,6 +40,7 @@ typename pcl::PointCloud<PointT>::Ptr ProcessPointClouds<PointT>::FilterCloud(ty
   
   	typename pcl::PointCloud<PointT>::Ptr cloudRegion(new pcl::PointCloud<PointT> ());
   
+  	// Region based filtering
   	typename pcl::CropBox<PointT> region(true);
   
     region.setMin(minPoint);
@@ -46,20 +50,21 @@ typename pcl::PointCloud<PointT>::Ptr ProcessPointClouds<PointT>::FilterCloud(ty
   
   	std::vector<int> indices;
   
+  	// remove points on the roof
    	typename pcl::CropBox<PointT> roof(true);
   
     roof.setMin(Eigen::Vector4f ( -1.5, -1.7, -1, 1));    
-    roof.setMax(Eigen::Vector4f ( 2.6, 1.7, -3, 1));
+    roof.setMax(Eigen::Vector4f ( 2.6, 1.7, -2, 1));
 	roof.setInputCloud(cloudRegion);
     roof.filter(indices);
   
-	
+	// extract inliers
 	pcl::PointIndices::Ptr inliers (new pcl::PointIndices);
   
     for (int point : indices){
         inliers->indices.push_back(point);
     }
-  
+  	
   	pcl::ExtractIndices<PointT> extract;
     extract.setInputCloud (cloudRegion);
     extract.setIndices (inliers);
@@ -74,7 +79,9 @@ typename pcl::PointCloud<PointT>::Ptr ProcessPointClouds<PointT>::FilterCloud(ty
 
 }
 
-
+/*
+Seperate point cloud into obstacle cloud and plane cloud
+*/
 template<typename PointT>
 std::pair<typename pcl::PointCloud<PointT>::Ptr, typename pcl::PointCloud<PointT>::Ptr> ProcessPointClouds<PointT>::SeparateClouds(pcl::PointIndices::Ptr inliers, typename pcl::PointCloud<PointT>::Ptr cloud) 
 {
@@ -92,11 +99,13 @@ std::pair<typename pcl::PointCloud<PointT>::Ptr, typename pcl::PointCloud<PointT
     extract.setNegative (true);
     extract.filter (*obstCloud);
 
-    std::pair<typename pcl::PointCloud<PointT>::Ptr, typename pcl::PointCloud<PointT>::Ptr> segResult(cloud, cloud);
+    std::pair<typename pcl::PointCloud<PointT>::Ptr, typename pcl::PointCloud<PointT>::Ptr> segResult(obstCloud, planeCloud);
     return segResult;
 }
 
-
+/*
+Segments the plane into inliers and outliers using seperate cloud function
+*/
 template<typename PointT>
 std::pair<typename pcl::PointCloud<PointT>::Ptr, typename pcl::PointCloud<PointT>::Ptr> ProcessPointClouds<PointT>::SegmentPlane(typename pcl::PointCloud<PointT>::Ptr cloud, int maxIterations, float distanceThreshold)
 {
@@ -132,7 +141,9 @@ std::pair<typename pcl::PointCloud<PointT>::Ptr, typename pcl::PointCloud<PointT
     return segResult;
 }
 
-
+/*
+Estimates the parameters of best fitting plane by random sampling using RANSAC algorithm
+*/
 template<typename PointT>
 std::pair<typename pcl::PointCloud<PointT>::Ptr, typename pcl::PointCloud<PointT>::Ptr> ProcessPointClouds<PointT>::Ransac3D(typename pcl::PointCloud<PointT>::Ptr cloud, int maxIterations, float distanceThreshold)
 {
@@ -147,6 +158,7 @@ std::pair<typename pcl::PointCloud<PointT>::Ptr, typename pcl::PointCloud<PointT
         
       float x1, y1, z1, x2, y2, z2, x3, y3, z3;
       
+      // 3 random points to form initial plane
       auto iter = inliers.begin();
       x1 = cloud->points[*iter].x;
       y1 = cloud->points[*iter].y;
@@ -162,11 +174,13 @@ std::pair<typename pcl::PointCloud<PointT>::Ptr, typename pcl::PointCloud<PointT
       y3 = cloud->points[*iter].y;
       z3 = cloud->points[*iter].z;
       
+      // Parameters of plane using cross prouct
       float a = (y2 - y1) * (z3 - z1) - (z2 - z1) * (y3 - y1);
       float b = (z2 - z1) * (x3 - x1) - (x2 - x1) * (z3 - z1);
       float c = (x2 - x1) * (y3 - y1) - (y2 - y1) * (x3 - x1);
       float d = -(a * x1 + b * y1 + c * z1);
       
+      // Check for all other neighbouring points
       for(int index = 0; index < cloud->points.size(); index++)
       {
       	if (inliers.count(index) > 0) 
@@ -181,6 +195,7 @@ std::pair<typename pcl::PointCloud<PointT>::Ptr, typename pcl::PointCloud<PointT
         	inliers.insert(index);
       }
       
+      // Choose the inliers with more points
       if(inliers.size() > inliersResult.size()) 
       	inliersResult = inliers;
     }
@@ -200,6 +215,10 @@ std::pair<typename pcl::PointCloud<PointT>::Ptr, typename pcl::PointCloud<PointT
     return segResult;
 }
 
+
+/*
+Recursive helper fucntion to find the clusters in the point cloud
+*/
 template<typename PointT>
 void ProcessPointClouds<PointT>::clusterHelper(int idx, typename pcl::PointCloud<PointT>::Ptr cloud, std::vector<int>& cluster, std::vector<bool>& processed, KdTree* tree, float distanceTol)
 {
@@ -208,11 +227,15 @@ void ProcessPointClouds<PointT>::clusterHelper(int idx, typename pcl::PointCloud
 	std::vector<int> nearest = tree->search(cloud->points[idx], distanceTol);
 	for(auto id : nearest)
 	{
-		if(!processed[id])
+		if(!processed[id]) // consider only unprocessed points in the cloud 
 			clusterHelper(id, cloud, cluster, processed, tree, distanceTol);
 	}
 }
 
+
+/* 
+Cluster the points in the point cloud based on euclidean metrics
+*/
 template<typename PointT>
 std::vector<typename pcl::PointCloud<PointT>::Ptr> ProcessPointClouds<PointT>::euclideanCluster(typename pcl::PointCloud<PointT>::Ptr cloud, KdTree* tree, float distanceTol, int minSize, int maxSize)
 {
@@ -250,7 +273,7 @@ std::vector<typename pcl::PointCloud<PointT>::Ptr> ProcessPointClouds<PointT>::e
 }
 
 
-
+// Cluster using PCL eulidean clustering library function. Usedonly for simple highway modelling
 template<typename PointT> 
 std::vector<typename pcl::PointCloud<PointT>::Ptr> ProcessPointClouds<PointT>::Clustering(typename pcl::PointCloud<PointT>::Ptr cloud, float clusterTolerance, int minSize, int maxSize)
 {
@@ -295,6 +318,7 @@ std::vector<typename pcl::PointCloud<PointT>::Ptr> ProcessPointClouds<PointT>::C
 }
 
 
+// Draw bounding box around the clustered point cloud
 template<typename PointT>
 Box ProcessPointClouds<PointT>::BoundingBox(typename pcl::PointCloud<PointT>::Ptr cluster)
 {
