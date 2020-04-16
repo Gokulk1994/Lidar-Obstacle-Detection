@@ -8,6 +8,7 @@
 // using templates for processPointClouds so also include .cpp to help linker
 #include "processPointClouds.cpp"
 
+
 std::vector<Car> initHighway(bool renderScene, pcl::visualization::PCLVisualizer::Ptr& viewer)
 {
 
@@ -77,18 +78,47 @@ for(pcl::PointCloud<pcl::PointXYZ>::Ptr cluster : cloudClusters)
     
 }
 
-void cityBlock(pcl::visualization::PCLVisualizer::Ptr& viewer)
+//void cityBlock(pcl::visualization::PCLVisualizer::Ptr& viewer)
+void cityBlock(pcl::visualization::PCLVisualizer::Ptr& viewer, ProcessPointClouds<pcl::PointXYZI>* pointProcessorI, const pcl::PointCloud<pcl::PointXYZI>::Ptr& inputCloud)
 {
   // ----------------------------------------------------
   // -----Open 3D viewer and display City Block     -----
   // ----------------------------------------------------
 
-  ProcessPointClouds<pcl::PointXYZI> pointProcessorI;
-  pcl::PointCloud<pcl::PointXYZI>::Ptr inputCloud = pointProcessorI.loadPcd("../src/sensors/data/pcd/data_1/0000000000.pcd");
+  //ProcessPointClouds<pcl::PointXYZI> pointProcessorI;
+  //pcl::PointCloud<pcl::PointXYZI>::Ptr inputCloud = pointProcessorI.loadPcd("../src/sensors/data/pcd/data_1/0000000000.pcd");
   //renderPointCloud(viewer,inputCloud,"inputCloud");
   pcl::PointCloud<pcl::PointXYZI>::Ptr FilteredCloud =  pointProcessorI.FilterCloud(inputCloud, 0.3,
   Eigen::Vector4f(-20,-6,-3,-1), Eigen::Vector4f(30,7,2,1) );
-  renderPointCloud(viewer,FilteredCloud,"FilteredCloud");
+  //renderPointCloud(viewer,FilteredCloud,"FilteredCloud");
+  
+  std::pair<pcl::PointCloud<pcl::PointXYZI>::Ptr, pcl::PointCloud<pcl::PointXYZI>::Ptr> segmentedCloud = pointProcessorI.Ransac3D(FilteredCloud, 100, 0.2);
+  //renderPointCloud(viewer,segmentCloud.first,"segmentCloud");
+  KdTree* tree = new KdTree;
+  
+  for (int i=0; i<segmentedCloud.first->points.size(); i++) 
+    tree->insert(segmentedCloud.first->points[i],i);
+  std::vector<pcl::PointCloud<pcl::PointXYZI>::Ptr> cloudClusters = 
+    pointProcessorI.euclideanCluster(segmentedCloud.first, tree, 0.5, 30, 250);
+  
+  
+  renderPointCloud(viewer,segmentedCloud.first, "obstacle", Color(1,0,0));
+  renderPointCloud(viewer,segmentedCloud.second, "normal", Color(0,1,0));
+  
+  int clusterId = 0;
+  std::vector<Color> colors = {Color(1,0,0), Color(0,1,1), Color(0,0,1)};
+  std::cout<<cloudClusters.size()<<std::endl;
+  for(pcl::PointCloud<pcl::PointXYZI>::Ptr cluster : cloudClusters)
+  {
+    std::cout << "cluster size ";
+    pointProcessorI.numPoints(cluster);
+    renderPointCloud(viewer,cluster,"obstacle"+std::to_string(clusterId),colors[clusterId % 3]);
+    
+    Box box = pointProcessorI.BoundingBox(cluster);
+    //renderBox(viewer,box,clusterId);
+    ++clusterId;
+  }
+
 }
 
 //setAngle: SWITCH CAMERA ANGLE {XY, TopDown, Side, FPS}
@@ -123,7 +153,7 @@ int main (int argc, char** argv)
     CameraAngle setAngle = XY;
     initCamera(setAngle, viewer);
     //simpleHighway(viewer);
-  cityBlock(viewer);
+   //cityBlock(viewer);
 
     while (!viewer->wasStopped ())
     {
