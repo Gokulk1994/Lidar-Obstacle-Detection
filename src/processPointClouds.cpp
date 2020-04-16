@@ -49,7 +49,7 @@ typename pcl::PointCloud<PointT>::Ptr ProcessPointClouds<PointT>::FilterCloud(ty
    	typename pcl::CropBox<PointT> roof(true);
   
     roof.setMin(Eigen::Vector4f ( -1.5, -1.7, -1, 1));    
-    roof.setMax(Eigen::Vector4f ( 2.6, 1.7, -4, 1));
+    roof.setMax(Eigen::Vector4f ( 2.6, 1.7, -3, 1));
 	roof.setInputCloud(cloudRegion);
     roof.filter(indices);
   
@@ -333,7 +333,7 @@ typename pcl::PointCloud<PointT>::Ptr ProcessPointClouds<PointT>::loadPcd(std::s
     {
         PCL_ERROR ("Couldn't read file \n");
     }
-    std::cerr << "Loaded " << cloud->points.size () << " data points from "+file << std::endl;
+    //std::cerr << "Loaded " << cloud->points.size () << " data points from "+file << std::endl;
 
     return cloud;
 }
